@@ -160,8 +160,51 @@ export function getDateRange(range) {
 }
 
 // ============================================
-// GST CALCULATIONS
+// GST CALCULATIONS & SMART RATES
 // ============================================
+
+export const GST_CATEGORIES = {
+    'grocery': 5,      // Standard grocery rate
+    'electronics': 18, // Standard electronics
+    'pharmacy': 12,    // Medicines usually 12%
+    'clothing': 5,     // Apparel < 1000
+    'hardware': 18,    // Industrial/Hardware
+    'stationery': 12,  // Paper/Pens
+    'restaurant': 5,   // AC/Non-AC Restaurant
+    'dairy': 0,        // Milk/Curd often 0%
+    'beverages': 12,   // Juices/Drinks
+    'snacks': 12,      // Processed food
+    'personal': 18,    // Soaps/Shampoos
+    'household': 18,   // Detergents/Cleaners
+    'general': 12      // General items
+};
+
+export const KEYWORD_RATES = {
+    'milk': 0, 'curd': 0, 'egg': 0, 'bread': 0, 'vegetable': 0, 'fruit': 0, // Essentials
+    'rice': 0, 'wheat': 0, 'dal': 0, 'flour': 0, 'salt': 0,                 // Staples
+    'mobile': 18, 'laptop': 18, 'camera': 18, 'tv': 18,                     // Electronics
+    'soap': 18, 'shampoo': 18, 'toothpaste': 18,                            // Personal Care
+    'biscuit': 18, 'chocolate': 18, 'butter': 12, 'cheese': 12,             // Processed Food
+    'medicine': 12, 'syrup': 12, 'tablet': 12                               // Pharma
+};
+
+export function suggestGSTRate(category, productName = '') {
+    // 1. Check for specific product keywords (highest priority)
+    const nameLower = productName.toLowerCase();
+    for (const [keyword, rate] of Object.entries(KEYWORD_RATES)) {
+        if (nameLower.includes(keyword)) {
+            return rate;
+        }
+    }
+
+    // 2. Fallback to Category default
+    if (category && GST_CATEGORIES[category] !== undefined) {
+        return GST_CATEGORIES[category];
+    }
+
+    // 3. Default fallback
+    return 0;
+}
 
 export function calculateGST(amount, gstRate) {
     const rate = parseFloat(gstRate) || 0;

@@ -350,8 +350,17 @@ export async function updateCustomer(customerId, data) {
 
 export async function getCustomersWithCredit() {
     try {
-        const customers = await getCustomers();
-        return customers.filter(c => c.creditBalance > 0);
+        const customersRef = collection(db, 'customers');
+        // Retrieve all customers where creditBalance > 0
+        const q = query(customersRef, where('creditBalance', '>', 0), orderBy('creditBalance', 'desc'));
+
+        const querySnapshot = await getDocs(q);
+        const customers = [];
+        querySnapshot.forEach((doc) => {
+            customers.push({ id: doc.id, ...doc.data() });
+        });
+
+        return customers;
     } catch (error) {
         console.error('❌ Error getting credit customers:', error);
         throw error;
@@ -424,6 +433,72 @@ export async function deleteExpense(expenseId) {
 // DASHBOARD STATS
 // ============================================
 
+export async function getSalesTrend(period = 'daily') {
+    try {
+        const now = new Date();
+        let startDate = new Date();
+        let dateFormat;
+
+        // Set date range based on period
+        if (period === 'daily') {
+            startDate.setDate(now.getDate() - 30); // Last 30 days
+            dateFormat = { month: 'short', day: 'numeric' };
+        } else if (period === 'weekly') {
+            startDate.setDate(now.getDate() - 90); // Last 12 weeks approx
+            dateFormat = { month: 'short', day: 'numeric' };
+        } else if (period === 'monthly') {
+            startDate.setFullYear(now.getFullYear() - 1); // Last 1 year
+            dateFormat = { month: 'short', year: 'numeric' };
+        }
+
+        // Get all invoices from start date
+        const invoices = await getInvoices({ startDate: startDate.toISOString() });
+
+        // Group data
+        const salesData = {};
+
+        invoices.forEach(inv => {
+            const date = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt);
+            let key;
+
+            if (period === 'daily') {
+                key = date.toLocaleDateString('en-US', dateFormat);
+            } else if (period === 'weekly') {
+                // Get start of week
+                const d = new Date(date);
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+                const weekStart = new Date(d.setDate(diff));
+                key = weekStart.toLocaleDateString('en-US', dateFormat);
+            } else {
+                key = date.toLocaleDateString('en-US', dateFormat);
+            }
+
+            if (!salesData[key]) salesData[key] = 0;
+            salesData[key] += inv.grandTotal || 0;
+        });
+
+        // Fill in missing dates only for daily view to ensure continuous line
+        if (period === 'daily') {
+            for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + 1)) {
+                const key = d.toLocaleDateString('en-US', dateFormat);
+                if (!salesData[key]) salesData[key] = 0;
+            }
+        }
+
+        // Sort by date
+        const sortedLabels = Object.keys(salesData).sort((a, b) => new Date(a) - new Date(b));
+
+        return {
+            labels: sortedLabels,
+            data: sortedLabels.map(label => salesData[label])
+        };
+    } catch (error) {
+        console.error('❌ Error getting sales trend:', error);
+        throw error;
+    }
+}
+
 export async function getDashboardStats(dateRange = 'today') {
     try {
         const now = new Date();
@@ -454,13 +529,28 @@ export async function getDashboardStats(dateRange = 'today') {
         const unpaidAmount = invoices.filter(inv => inv.status === 'unpaid').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
         const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
-        // Payment mode breakdown
+        // Payment mode breakdown - support both old single mode and new split payments
         const paymentModes = {
-            cash: invoices.filter(inv => inv.paymentMode === 'cash').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0),
-            upi: invoices.filter(inv => inv.paymentMode === 'upi').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0),
-            card: invoices.filter(inv => inv.paymentMode === 'card').reduce((sum, inv) => sum + (inv.grandTotal || 0), 0),
+            cash: 0,
+            upi: 0,
+            card: 0,
             credit: unpaidAmount
         };
+
+        invoices.forEach(inv => {
+            if (inv.paymentSplit) {
+                // New split payment format
+                paymentModes.cash += inv.paymentSplit.cash || 0;
+                paymentModes.upi += inv.paymentSplit.upi || 0;
+                paymentModes.card += inv.paymentSplit.card || 0;
+            } else {
+                // Old single payment mode format
+                const amount = inv.grandTotal || 0;
+                if (inv.paymentMode === 'cash') paymentModes.cash += amount;
+                else if (inv.paymentMode === 'upi') paymentModes.upi += amount;
+                else if (inv.paymentMode === 'card') paymentModes.card += amount;
+            }
+        });
 
         // Top selling products
         const productSales = {};
@@ -574,6 +664,84 @@ export async function exportData(type) {
         return data;
     } catch (error) {
         console.error('❌ Error exporting data:', error);
+        throw error;
+    }
+}
+
+// ============================================
+// RETURNS
+// ============================================
+
+export async function addReturn(data) {
+    try {
+        const returnsRef = collection(db, 'returns');
+        const docRef = await addDoc(returnsRef, {
+            ...data,
+            createdAt: Timestamp.now()
+        });
+        console.log('✅ Return recorded');
+        return docRef.id;
+    } catch (error) {
+        console.error('❌ Error adding return:', error);
+        throw error;
+    }
+}
+
+export async function getReturns(filters = {}) {
+    try {
+        const returnsRef = collection(db, 'returns');
+        let q = query(returnsRef, orderBy('createdAt', 'desc'));
+
+        if (filters.limit) {
+            q = query(q, limit(filters.limit));
+        }
+
+        const querySnapshot = await getDocs(q);
+        const returns = [];
+        querySnapshot.forEach((doc) => {
+            returns.push({ id: doc.id, ...doc.data() });
+        });
+
+        return returns;
+    } catch (error) {
+        console.error('❌ Error getting returns:', error);
+        throw error;
+    }
+}
+
+// ============================================
+// PAYMENTS / CREDIT HISTORY
+// ============================================
+
+export async function addPaymentRecord(data) {
+    try {
+        const paymentsRef = collection(db, 'payments');
+        const docRef = await addDoc(paymentsRef, {
+            ...data,
+            createdAt: Timestamp.now()
+        });
+        console.log('✅ Payment recorded');
+        return docRef.id;
+    } catch (error) {
+        console.error('❌ Error adding payment record:', error);
+        throw error;
+    }
+}
+
+export async function getCustomerPayments(customerId) {
+    try {
+        const paymentsRef = collection(db, 'payments');
+        const q = query(paymentsRef, where('customerId', '==', customerId), orderBy('createdAt', 'desc'));
+
+        const querySnapshot = await getDocs(q);
+        const payments = [];
+        querySnapshot.forEach((doc) => {
+            payments.push({ id: doc.id, ...doc.data() });
+        });
+
+        return payments;
+    } catch (error) {
+        console.error('❌ Error getting customer payments:', error);
         throw error;
     }
 }

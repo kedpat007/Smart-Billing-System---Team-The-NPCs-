@@ -44,6 +44,10 @@
                     <span class="nav-icon">🧾</span>
                     <span class="nav-text">New Bill (नया बिल)</span>
                 </a>
+                <a href="#returns" class="nav-item" data-page="returns">
+                    <span class="nav-icon">↩️</span>
+                    <span class="nav-text">Returns (वापसी)</span>
+                </a>
                 <a href="#catalog" class="nav-item" data-page="catalog">
                     <span class="nav-icon">📦</span>
                     <span class="nav-text">Products (उत्पाद)</span>
@@ -144,12 +148,7 @@
                     <input type="text" id="upiId" placeholder="yourname@upi">
                 </div>
 
-                <div class="form-group">
-                    <label for="userPin">Set 4-Digit PIN (पिन सेट करें) *</label>
-                    <input type="password" id="userPin" required maxlength="4" minlength="4" placeholder="••••"
-                        pattern="[0-9]{4}">
-                    <small>This PIN is for quick login</small>
-                </div>
+
 
                 <button type="submit" class="btn btn-primary btn-large">
                     Start Using SmartDukaan 🚀
@@ -164,23 +163,56 @@
             <div class="login-header">
                 <span class="logo-icon large">🏪</span>
                 <h1>SmartDukaan</h1>
-                <p id="loginBusinessName">Your Business</p>
+                <p id="loginSubtitle">Login to access your shop</p>
             </div>
 
             <form id="loginForm">
-                <div class="form-group">
-                    <label>Enter PIN (पिन डालें)</label>
-                    <div class="pin-input-container">
-                        <input type="password" class="pin-input" maxlength="1" data-index="0">
-                        <input type="password" class="pin-input" maxlength="1" data-index="1">
-                        <input type="password" class="pin-input" maxlength="1" data-index="2">
-                        <input type="password" class="pin-input" maxlength="1" data-index="3">
+                <!-- Phone Step -->
+                <div id="phoneStep">
+                    <div class="form-group">
+                        <label>Phone Number (फ़ोन नंबर)</label>
+                        <div style="display: flex; gap: 10px;">
+                            <span
+                                style="padding: 10px; background: #eee; border-radius: 8px; border: 1px solid #ddd; display: flex; align-items: center;">+91</span>
+                            <input type="tel" id="loginPhone" required maxlength="10" placeholder="9876543210"
+                                pattern="[0-9]{10}">
+                        </div>
                     </div>
-                    <p class="error-message" id="pinError"></p>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;"
+                        id="sendOtpBtn">
+                        Send OTP (ओटीपी भेजें)
+                    </button>
+                </div>
+
+                <!-- OTP Step (Initially Hidden) -->
+                <div id="otpStep" style="display: none;">
+                    <div class="form-group">
+                        <label>Enter OTP (ओटीपी डालें)</label>
+                        <div class="pin-input-container">
+                            <input type="text" class="pin-input" maxlength="1" data-index="0">
+                            <input type="text" class="pin-input" maxlength="1" data-index="1">
+                            <input type="text" class="pin-input" maxlength="1" data-index="2">
+                            <input type="text" class="pin-input" maxlength="1" data-index="3">
+                            <input type="text" class="pin-input" maxlength="1" data-index="4">
+                            <input type="text" class="pin-input" maxlength="1" data-index="5">
+                        </div>
+                        <p class="error-message" id="otpError"></p>
+                    </div>
+                    <button type="button" class="btn btn-primary" style="width: 100%; margin-top: 1rem;"
+                        id="verifyOtpBtn">
+                        Verify & Login (सत्यापित करें)
+                    </button>
+                    <p style="text-align: center; margin-top: 1rem; cursor: pointer; color: var(--primary-color);"
+                        onclick="resetLogin()">
+                        Change Number
+                    </p>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- Recaptcha Container -->
+    <div id="recaptcha-container"></div>
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
