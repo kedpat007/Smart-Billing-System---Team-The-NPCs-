@@ -269,6 +269,49 @@
         </div>
     </div>
 
+    <!-- Bulk Greeting Modal -->
+    <div class="modal" id="bulkGreetingModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Bulk Festive Greetings (थोक शुभकामनाएं)</h3>
+                <button class="modal-close" onclick="closeBulkGreetingModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Select Template (टेम्पलेट चुनें)</label>
+                    <select id="greetingTemplate" onchange="updateGreetingPreview()">
+                        <option value="diwali">🪔 Happy Diwali Wish</option>
+                        <option value="feedback">📋 Initial Feedback Request</option>
+                        <option value="custom">✍️ Custom Message</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Message Preview (संदेश पूर्वावलोकन)</label>
+                    <textarea id="greetingMessage" rows="6"
+                        style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; font-family: inherit;"></textarea>
+                </div>
+                <div id="bulkSendStatus"
+                    style="margin-bottom: 1rem; padding: 10px; background: #e0f2fe; border-radius: 8px; display: none;">
+                    <p id="sendProgressText" style="font-weight: 600; color: #0369a1; margin: 0;"></p>
+                </div>
+                <div class="customer-selection-list" id="bulkCustomerList"
+                    style="max-height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; margin-bottom: 1rem; padding: 10px;">
+                    <!-- Customers will be listed here with checkboxes -->
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn btn-outline" style="flex: 1;"
+                        onclick="selectAllCustomers(true)">Select All</button>
+                    <button type="button" class="btn btn-outline" style="flex: 1;"
+                        onclick="selectAllCustomers(false)">Deselect All</button>
+                </div>
+                <button type="button" class="btn btn-primary btn-large" style="width: 100%; margin-top: 1rem;"
+                    id="startBulkSendBtn" onclick="handleBulkSendClick()">
+                    Start Sending (भेजना शुरू करें)
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Recaptcha Container -->
     <div id="recaptcha-container"></div>
 

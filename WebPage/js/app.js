@@ -1679,12 +1679,23 @@ async function handleProductSave(e) {
     const productId = document.getElementById('productId').value;
     let name = document.getElementById('prodName').value.trim();
     const costPrice = parseFloat(document.getElementById('prodCost').value) || 0;
-    const price = parseFloat(document.getElementById('prodPrice').value);
+    const priceStr = document.getElementById('prodPrice').value;
+    const price = parseFloat(priceStr);
     const unit = document.getElementById('prodUnit').value;
     const gstRate = parseInt(document.getElementById('prodGST').value) || 0;
-    const stock = document.getElementById('prodStock').value ? parseInt(document.getElementById('prodStock').value) : undefined;
+    const stockStr = document.getElementById('prodStock').value;
     const category = document.getElementById('prodCategory').value;
     let sku = document.getElementById('prodSKU').value.trim();
+
+    // Validation
+    if (!name) {
+        showToast('Product name is required', 'error');
+        return;
+    }
+    if (isNaN(price)) {
+        showToast('Valid selling price is required', 'error');
+        return;
+    }
 
     // Standardize name before saving to ensure future matches
     const std = findProductByName(name);
@@ -1694,7 +1705,21 @@ async function handleProductSave(e) {
         sku = generateSKU(name, category);
     }
 
-    const data = { name, costPrice, price, unit, gstRate, stock, category, sku };
+    const data = {
+        name,
+        costPrice,
+        price,
+        unit,
+        gstRate,
+        category,
+        sku,
+        updatedAt: new Date() // Local timestamp for consistency
+    };
+
+    // Only add stock if it's a valid number
+    if (stockStr && !isNaN(parseInt(stockStr))) {
+        data.stock = parseInt(stockStr);
+    }
 
     try {
         if (productId) {
@@ -1708,8 +1733,8 @@ async function handleProductSave(e) {
         closeProductModal();
         renderCatalog(document.getElementById('mainContent'));
     } catch (error) {
-        console.error(error);
-        showToast('Error saving product', 'error');
+        console.error('❌ Save Error:', error);
+        showToast('Error saving product: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
@@ -2074,9 +2099,14 @@ async function renderCustomers(container) {
                     <h1 class="page-title">Customers (ग्राहक सूची)</h1>
                     <p class="page-subtitle">${state.customers.length} customers</p>
                 </div>
-                <button class="btn btn-primary" onclick="showAddCustomerModal()">
-                    ➕ Add Customer
-                </button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-outline" onclick="showBulkGreetingModal()">
+                        📨 Bulk Greetings
+                    </button>
+                    <button class="btn btn-primary" onclick="showAddCustomerModal()">
+                        ➕ Add Customer
+                    </button>
+                </div>
             </div>
 
             <div class="card">
@@ -2118,6 +2148,159 @@ async function renderCustomers(container) {
             `}
             </div>
             `;
+}
+
+// Bulk Greetings Logic
+window.showBulkGreetingModal = function () {
+    const modal = document.getElementById('bulkGreetingModal');
+    const customerList = document.getElementById('bulkCustomerList');
+    if (!modal || !customerList) return;
+
+    // Load customers into the selection list
+    customerList.innerHTML = state.customers.map(c => {
+        const phone = c.phone || 'No Phone';
+        return `
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid #eee;">
+                <input type="checkbox" class="bulk-customer-check" 
+                       data-name="${(c.name || '').replace(/"/g, '&quot;')}" 
+                       data-phone="${phone === 'No Phone' ? '' : phone}" 
+                       checked>
+                <div style="flex: 1;">
+                    <div style="font-weight: 500;">${c.name}</div>
+                    <div style="font-size: 0.8rem; color: #666;">${phone}</div>
+                </div>
+            </div>
+        `;
+    }).join('') || '<p style="text-align: center; padding: 1rem; color: #666;">No customers found</p>';
+
+    updateGreetingPreview();
+    document.getElementById('bulkSendStatus').style.display = 'none';
+    const startBtn = document.getElementById('startBulkSendBtn');
+    if (startBtn) {
+        startBtn.textContent = 'Start Sending (भेजना शुरू करें)';
+        startBtn.disabled = false;
+    }
+    modal.classList.add('active');
+};
+
+window.closeBulkGreetingModal = function () {
+    document.getElementById('bulkGreetingModal').classList.remove('active');
+    window.bulkState = null; // Clear bulk state
+};
+
+window.updateGreetingPreview = function () {
+    const template = document.getElementById('greetingTemplate').value;
+    const textarea = document.getElementById('greetingMessage');
+    const bizName = state.vendor?.businessName || 'SmartDukaan';
+
+    const templates = {
+        diwali: `🪔 *Happy Diwali!* 🪔\n\nDear Customer,\n\nWishing you and your family a very Happy and Prosperous Diwali! Thank you for being a valued part of *${bizName}*.\n\nWarm Regards,\n${bizName}`,
+        feedback: `📋 *Feedback Request* 📋\n\nDear Customer,\n\nWe hope you had a great experience shopping with *${bizName}*. We would love to hear your feedback to serve you better.\n\nThank you! 🙏`,
+        custom: `Hello,\n\n[Write your message here]\n\nRegards,\n*${bizName}*`
+    };
+
+    textarea.value = templates[template] || '';
+};
+
+window.selectAllCustomers = function (checked) {
+    document.querySelectorAll('.bulk-customer-check').forEach(cb => cb.checked = checked);
+};
+
+window.handleBulkSendClick = function () {
+    if (!window.bulkState || window.bulkState.currentIndex >= window.bulkState.customers.length) {
+        startBulkMessaging();
+    } else {
+        processNextBulkMessage();
+    }
+};
+
+window.startBulkMessaging = function () {
+    const selectedCustomers = Array.from(document.querySelectorAll('.bulk-customer-check:checked'))
+        .map(cb => ({ name: cb.dataset.name, phone: cb.dataset.phone }));
+
+    if (selectedCustomers.length === 0) {
+        showToast('Please select at least one customer', 'error');
+        return;
+    }
+
+    const message = document.getElementById('greetingMessage').value;
+    if (!message) {
+        showToast('Please enter a message', 'error');
+        return;
+    }
+
+    console.log(`🚀 Starting bulk messaging for ${selectedCustomers.length} customers`);
+
+    // Initialize bulk state
+    window.bulkState = {
+        customers: selectedCustomers,
+        currentIndex: 0,
+        message: message
+    };
+
+    const statusContainer = document.getElementById('bulkSendStatus');
+    if (statusContainer) statusContainer.style.display = 'block';
+
+    processNextBulkMessage();
+};
+
+function processNextBulkMessage() {
+    if (!window.bulkState) return;
+
+    const { customers, currentIndex, message } = window.bulkState;
+
+    if (currentIndex >= customers.length) {
+        document.getElementById('sendProgressText').textContent = '✅ All messages sent!';
+        const btn = document.getElementById('startBulkSendBtn');
+        if (btn) {
+            btn.textContent = 'Finished! (पूर्ण)';
+            btn.disabled = true;
+        }
+        showToast('Bulk messaging completed!', 'success');
+        return;
+    }
+
+    const customer = customers[currentIndex];
+    console.log(`📤 Processing ${customer.name} (${currentIndex + 1}/${customers.length})`);
+
+    const progressText = document.getElementById('sendProgressText');
+    if (progressText) {
+        progressText.textContent = `Sending to: ${customer.name} (${currentIndex + 1}/${customers.length})`;
+    }
+
+    const nextBtn = document.getElementById('startBulkSendBtn');
+    if (nextBtn) {
+        const nextCustomer = customers[currentIndex + 1];
+        nextBtn.textContent = nextCustomer
+            ? `Send to: ${nextCustomer.name} (अगला)`
+            : 'Close / Finish';
+    }
+
+    if (customer.phone && customer.phone !== 'No Phone' && customer.phone !== 'null' && customer.phone !== 'undefined') {
+        showToast(`Opening WhatsApp for ${customer.name}...`, 'info');
+
+        // CALL DIRECTLY (No setTimeout) to preserve user gesture context
+        // This prevents the browser from blocking the popup
+        shareOnWhatsApp(message, customer.phone);
+
+        // Update the manual link in case popup was still blocked
+        const encodedText = encodeURIComponent(message);
+        let cleanPhone = String(customer.phone).replace(/\D/g, '');
+        if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+        else if (cleanPhone.length > 12) cleanPhone = cleanPhone.slice(-12);
+        const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodedText}` : `https://wa.me/?text=${encodedText}`;
+
+        if (progressText) {
+            progressText.innerHTML = `Sending to: <strong>${customer.name}</strong> (${currentIndex + 1}/${customers.length})<br>
+            <a href="${url}" target="_blank" style="color: var(--primary-500); font-size: 0.9rem; text-decoration: underline;">
+                Click here if window didn't open (यहाँ क्लिक करें)
+            </a>`;
+        }
+    } else {
+        showToast(`Skipping ${customer.name} (No valid phone found)`, 'warning');
+    }
+
+    window.bulkState.currentIndex++;
 }
 
 // ============================================

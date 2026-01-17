@@ -453,9 +453,27 @@ export function removeFromLocal(key) {
 
 export function shareOnWhatsApp(text, phone = '') {
     const encodedText = encodeURIComponent(text);
-    const url = phone
-        ? `https://wa.me/91${phone}?text=${encodedText}`
+
+    // Clean phone number: remove all non-digits
+    let cleanPhone = String(phone).replace(/\D/g, '');
+
+    // For Indian numbers:
+    // 1. If 10 digits, add 91 prefix
+    // 2. If 11 digits and starts with 0, replace 0 with 91
+    // 3. If 12 digits and starts with 91, keep as is
+    if (cleanPhone.length === 10) {
+        cleanPhone = '91' + cleanPhone;
+    } else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+        cleanPhone = '91' + cleanPhone.slice(1);
+    } else if (cleanPhone.length > 12) {
+        cleanPhone = cleanPhone.slice(-12);
+    }
+
+    const url = cleanPhone
+        ? `https://wa.me/${cleanPhone}?text=${encodedText}`
         : `https://wa.me/?text=${encodedText}`;
+
+    console.log(`🔗 Opening WhatsApp URL: ${url}`);
     window.open(url, '_blank');
 }
 

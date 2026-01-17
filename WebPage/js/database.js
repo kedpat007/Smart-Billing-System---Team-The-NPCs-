@@ -71,8 +71,12 @@ export async function updateVendorProfile(data) {
 export async function addProduct(data) {
     try {
         const productsRef = collection(db, 'products');
+        // Clean data of undefined values
+        const cleanData = Object.fromEntries(
+            Object.entries(data).filter(([_, v]) => v !== undefined)
+        );
         const docRef = await addDoc(productsRef, {
-            ...data,
+            ...cleanData,
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now()
         });
@@ -117,8 +121,12 @@ export async function getProductById(productId) {
 export async function updateProduct(productId, data) {
     try {
         const productRef = doc(db, 'products', productId);
+        // Clean data of undefined values
+        const cleanData = Object.fromEntries(
+            Object.entries(data).filter(([_, v]) => v !== undefined)
+        );
         await updateDoc(productRef, {
-            ...data,
+            ...cleanData,
             updatedAt: Timestamp.now()
         });
         return true;
