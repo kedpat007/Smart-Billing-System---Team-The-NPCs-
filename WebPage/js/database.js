@@ -771,13 +771,19 @@ export async function getLastCostPrice(productName) {
         const purchasesRef = collection(db, 'purchases');
         const q = query(
             purchasesRef,
-            where('name', '==', productName),
-            orderBy('createdAt', 'desc'),
-            limit(1)
+            where('name', '==', productName)
         );
         const querySnapshot = await getDocs(q);
+
         if (!querySnapshot.empty) {
-            return querySnapshot.docs[0].data().costPrice;
+            // Sort in-memory to avoid needing a composite index for 'name' + 'createdAt'
+            const purchases = querySnapshot.docs.map(doc => doc.data());
+            purchases.sort((a, b) => {
+                const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+                const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+                return dateB - dateA;
+            });
+            return purchases[0].costPrice;
         }
         return null;
     } catch (error) {

@@ -122,8 +122,10 @@ autoFillData = async () => {
     }
 
     // 2. Check for Manual Stock Entry using the standardized name
+    console.log(`🔍 Fetching cost for finalName: "${finalName}" (input was: "${name}")`);
     const lastCost = await getLastCostPrice(finalName);
     if (lastCost) {
+        console.log(`✅ Found cost price: ${lastCost}`);
         costPrice = lastCost;
         const prodCost = document.getElementById('prodCost');
         if (prodCost) {
@@ -132,6 +134,7 @@ autoFillData = async () => {
         }
         showToast('Found recent purchase price!', 'success');
     } else {
+        console.log(`❌ No cost found for: "${finalName}"`);
         if (standardProduct) {
             showToast('Please enter Cost Price (No stock found for this item)', 'info');
         }
@@ -255,10 +258,14 @@ async function initApp() {
     if (stockForm) {
         stockForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const name = document.getElementById('stockName').value.trim();
+            let name = document.getElementById('stockName').value.trim();
             const costPrice = parseFloat(document.getElementById('stockCost').value);
             const quantity = parseInt(document.getElementById('stockQty').value);
             const category = document.getElementById('stockCategory').value;
+
+            // Standardize name before saving
+            const std = findProductByName(name);
+            if (std) name = std.name;
 
             if (name && costPrice && quantity) {
                 try {
@@ -1670,7 +1677,7 @@ async function handleProductSave(e) {
     e.preventDefault();
 
     const productId = document.getElementById('productId').value;
-    const name = document.getElementById('prodName').value.trim();
+    let name = document.getElementById('prodName').value.trim();
     const costPrice = parseFloat(document.getElementById('prodCost').value) || 0;
     const price = parseFloat(document.getElementById('prodPrice').value);
     const unit = document.getElementById('prodUnit').value;
@@ -1678,6 +1685,10 @@ async function handleProductSave(e) {
     const stock = document.getElementById('prodStock').value ? parseInt(document.getElementById('prodStock').value) : undefined;
     const category = document.getElementById('prodCategory').value;
     let sku = document.getElementById('prodSKU').value.trim();
+
+    // Standardize name before saving to ensure future matches
+    const std = findProductByName(name);
+    if (std) name = std.name;
 
     if (!sku) {
         sku = generateSKU(name, category);
