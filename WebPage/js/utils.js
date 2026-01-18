@@ -630,3 +630,92 @@ export function generateUPIQRData(upiId, amount, name) {
 
     return `upi://pay?${params.toString()}`;
 }
+
+// ============================================
+// PDF GENERATION
+// ============================================
+
+export function downloadPDF(element, filename) {
+    const opt = {
+        margin: 10,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    return html2pdf().set(opt).from(element).save();
+}
+
+export function downloadInvoicePDF(invoice, vendor) {
+    const tempDiv = document.createElement('div');
+    tempDiv.style.padding = '20px';
+    tempDiv.style.fontFamily = "'Inter', sans-serif";
+
+    tempDiv.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+            <h1 style="margin: 0; color: #1a1a1a;">${vendor.businessName}</h1>
+            <p style="margin: 5px 0; color: #666;">${vendor.address}</p>
+            ${vendor.gstNumber ? `<p style="margin: 5px 0; color: #666;">GSTIN: ${vendor.gstNumber}</p>` : ''}
+            <p style="margin: 5px 0; color: #666;">📞 ${vendor.phone}</p>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <div>
+                <h3 style="margin: 0;">Invoice to:</h3>
+                <p style="margin: 5px 0;">${invoice.customerName || 'Walk-in Customer'}</p>
+                ${invoice.customerPhone ? `<p style="margin: 5px 0;">Phone: ${invoice.customerPhone}</p>` : ''}
+            </div>
+            <div style="text-align: right;">
+                <h3 style="margin: 0; color: #3b82f6;">INVOICE #${invoice.invoiceNumber}</h3>
+                <p style="margin: 5px 0;">Date: ${formatDate(invoice.createdAt, 'datetime')}</p>
+                <p style="margin: 5px 0;">Status: <strong>${invoice.status.toUpperCase()}</strong></p>
+            </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 12px; text-align: left;">Item</th>
+                    <th style="padding: 12px; text-align: center;">Qty</th>
+                    <th style="padding: 12px; text-align: right;">Price</th>
+                    <th style="padding: 12px; text-align: right;">GST</th>
+                    <th style="padding: 12px; text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${invoice.items.map(item => `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 12px;">${item.name}</td>
+                        <td style="padding: 12px; text-align: center;">${item.quantity}</td>
+                        <td style="padding: 12px; text-align: right;">${formatCurrency(item.price)}</td>
+                        <td style="padding: 12px; text-align: right;">${item.gstRate}%</td>
+                        <td style="padding: 12px; text-align: right;">${formatCurrency(item.total)}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        
+        <div style="margin-left: auto; width: 300px;">
+            <div style="display: flex; justify-content: space-between; padding: 5px 0;">
+                <span>Subtotal:</span>
+                <span>${formatCurrency(invoice.subtotal)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 5px 0;">
+                <span>GST Total:</span>
+                <span>${formatCurrency(invoice.gstTotal)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid #3b82f6; font-weight: bold; font-size: 1.2rem; color: #1e40af;">
+                <span>Grand Total:</span>
+                <span>${formatCurrency(invoice.grandTotal)}</span>
+            </div>
+        </div>
+        
+        <div style="margin-top: 40px; text-align: center; color: #94a3b8; font-size: 0.9rem;">
+            <p>Thank you for your business!</p>
+            <p>Generated via SmartDukaan</p>
+        </div>
+    `;
+
+    return downloadPDF(tempDiv, `${invoice.invoiceNumber}.pdf`);
+}

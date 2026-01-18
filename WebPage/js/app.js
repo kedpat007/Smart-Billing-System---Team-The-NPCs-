@@ -48,7 +48,9 @@ import {
     validatePIN,
     suggestGSTRate,
     calculateSellingPrice,
-    findProductByName
+    findProductByName,
+    downloadInvoicePDF,
+    downloadPDF
 } from './utils.js';
 
 import {
@@ -56,7 +58,9 @@ import {
     signInWithPhoneNumber,
     RecaptchaVerifier,
     onAuthStateChanged,
-    signOut
+    signOut,
+    GoogleAuthProvider,
+    signInWithPopup
 } from './firebase-config.js';
 
 // Global Helpers for Auto-Fill (Available to renderCatalog)
@@ -184,13 +188,20 @@ const state = {
 async function initApp() {
     console.log('🚀 Initializing SmartDukaan...');
 
+    // Protocol check for Firebase Auth
+    if (window.location.protocol === 'file:') {
+        setTimeout(() => {
+            showToast('⚠️ Firebase Auth requires a web server (http/https) to work. It will NOT work if opened directly as a file.', 'error');
+        }, 2000);
+    }
+
     setupRecaptcha();
     setupNavigation();
 
     // Auth Listener
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            console.log('✅ User logged in:', user.phoneNumber);
+            console.log('✅ User logged in:', user.phoneNumber || user.email);
             state.isLoggedIn = true;
 
             // Allow time for modal to close if open
@@ -200,7 +211,7 @@ async function initApp() {
             try {
                 state.vendor = await getVendorProfile();
                 if (!state.vendor) {
-                    showSetupModal(user.phoneNumber);
+                    showSetupModal(user.phoneNumber || '');
                 } else {
                     updateUserInfo();
                     showPage('dashboard');
@@ -230,6 +241,7 @@ async function initApp() {
 
     document.getElementById('sendOtpBtn')?.addEventListener('click', handleSendOTP);
     document.getElementById('verifyOtpBtn')?.addEventListener('click', handleVerifyOTP);
+    document.getElementById('googleLoginBtn')?.addEventListener('click', handleGoogleLogin);
 
 
 
@@ -392,6 +404,43 @@ async function handleVerifyOTP(e) {
     }
 }
 
+async function handleGoogleLogin() {
+    const btn = document.getElementById('googleLoginBtn');
+    if (btn.disabled) return;
+
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = 'Signing in...';
+
+    try {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+
+        const result = await signInWithPopup(auth, provider);
+        console.log('✅ Google login success:', result.user.email);
+        showToast('Logged in with Google!', 'success');
+    } catch (error) {
+        console.error('❌ Google login error:', error);
+
+        let message = 'Error signing in with Google';
+        if (error.code === 'auth/popup-blocked') {
+            message = 'Wait! Popup was blocked. Please allow it.';
+        } else if (error.code === 'auth/unauthorized-domain') {
+            const domain = window.location.hostname || 'this domain';
+            message = `Security Error: "${domain}" is not authorized in Firebase Console.`;
+        } else if (error.code === 'auth/operation-not-allowed') {
+            message = 'Google Login is not enabled in Firebase Auth.';
+        } else {
+            message = `Auth Error: ${error.code || error.message}`;
+        }
+
+        showToast(message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
 window.resetLogin = function () {
     document.getElementById('phoneStep').style.display = 'block';
     document.getElementById('otpStep').style.display = 'none';
@@ -417,11 +466,12 @@ function showSetupModal(phoneNumber = '') {
 
     const form = document.getElementById('setupForm');
     if (phoneNumber) {
-        // Remove +91 or other prefix if present for cleaner display/storage?
-        // Actually keep it as is or strip? Let's strip +91 for the form input
         const rawPhone = phoneNumber.replace('+91', '');
         form.phoneNumber.value = rawPhone;
-        form.phoneNumber.readOnly = true; // Lock it since it's auth-verified
+        form.phoneNumber.readOnly = true;
+    } else {
+        form.phoneNumber.value = '';
+        form.phoneNumber.readOnly = false;
     }
 
     form.addEventListener('submit', handleSetup);
@@ -432,12 +482,12 @@ async function handleSetup(e) {
 
     const form = e.target;
     const data = {
-        businessName: form.businessName.value.trim(),
-        address: form.businessAddress.value.trim(),
-        gstNumber: form.gstNumber.value.trim().toUpperCase(),
-        phone: form.phoneNumber.value.trim(),
-        category: form.businessCategory.value,
-        upiId: form.upiId.value.trim()
+        businessName: form.elements['businessName'].value.trim(),
+        address: form.elements['address'].value.trim(),
+        gstNumber: form.elements['gstNumber'].value.trim().toUpperCase(),
+        phone: form.elements['phone'].value.trim(),
+        category: form.elements['category'].value,
+        upiId: form.elements['upiId'].value.trim()
         // PIN removed
     };
 
@@ -1799,6 +1849,7 @@ async function renderBillHistory(container) {
                                 </td>
                                 <td>
                                     <button class="btn btn-outline" onclick="viewInvoice('${inv.id}')">👁️</button>
+                                    <button class="btn btn-outline" onclick="downloadInvoice('${inv.id}')">📥</button>
                                     <button class="btn btn-outline" onclick="shareInvoice('${inv.id}')">📤</button>
                                 </td>
                             </tr>
@@ -2450,8 +2501,11 @@ async function renderReports(container) {
 
             <div class="grid-2">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                         <h3 class="card-title">GST Summary (${month}/${year})</h3>
+                        <button class="btn btn-outline" style="font-size: 0.75rem; padding: 4px 8px;" onclick="downloadGSTReport()">
+                            📥 PDF
+                        </button>
                     </div>
                     <div id="gstReport">Loading...</div>
                 </div>
@@ -2674,6 +2728,144 @@ window.showStockModal = function () {
 window.closeStockModal = function () {
     const modal = document.getElementById('stockModal');
     if (modal) modal.classList.remove('active');
+};
+
+
+// ============================================
+// INVOICE DETAILS & PDF ACTIONS
+// ============================================
+
+window.viewInvoice = async function (id) {
+    try {
+        const invoices = await getInvoices();
+        const invoice = invoices.find(inv => inv.id === id);
+        if (!invoice) {
+            showToast('Invoice not found', 'error');
+            return;
+        }
+
+        // Show a modal or overlay with invoice details and actions
+        const modal = document.createElement('div');
+        modal.className = 'modal active';
+        modal.id = 'invoiceViewModal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3>Invoice Details</h3>
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                </div>
+                <div id="invoicePrintArea" style="padding: 1rem; background: white;">
+                    <div style="text-align: center; margin-bottom: 1rem;">
+                        <h2>${state.vendor?.businessName}</h2>
+                        <p>${state.vendor?.address}</p>
+                        <p>📞 ${state.vendor?.phone}</p>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                        <div>
+                            <p><strong>To:</strong> ${invoice.customerName || 'Walk-in'}</p>
+                            <p><strong>Phone:</strong> ${invoice.customerPhone || '-'}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <p><strong>Inv #:</strong> ${invoice.invoiceNumber}</p>
+                            <p><strong>Date:</strong> ${formatDate(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt, 'datetime')}</p>
+                        </div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #eee;">
+                                <th style="text-align: left; padding: 5px;">Item</th>
+                                <th style="text-align: center; padding: 5px;">Qty</th>
+                                <th style="text-align: right; padding: 5px;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${invoice.items.map(item => `
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 5px;">${item.name}</td>
+                                    <td style="text-align: center; padding: 5px;">${item.quantity}</td>
+                                    <td style="text-align: right; padding: 5px;">${formatCurrency(item.total)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 1rem; border-top: 2px solid #eee; padding-top: 10px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Subtotal:</span>
+                            <span>${formatCurrency(invoice.subtotal)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>GST:</span>
+                            <span>${formatCurrency(invoice.gstTotal)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1rem;">
+                            <span>Grand Total:</span>
+                            <span>${formatCurrency(invoice.grandTotal)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 1.5rem;">
+                    <button class="btn btn-primary" style="flex: 1;" onclick="downloadInvoice('${id}')">
+                        📥 Download PDF
+                    </button>
+                    <button class="btn btn-outline" style="flex: 1;" onclick="printExistingInvoice('${id}')">
+                        🖨️ Print
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } catch (error) {
+        console.error('Error viewing invoice:', error);
+        showToast('Error loading invoice', 'error');
+    }
+};
+
+window.downloadInvoice = async function (id) {
+    try {
+        const invoices = await getInvoices();
+        const invoice = invoices.find(inv => inv.id === id);
+        if (!invoice) return;
+
+        showToast('Generating PDF...', 'info');
+        await downloadInvoicePDF(invoice, state.vendor);
+        showToast('PDF downloaded! ✓', 'success');
+    } catch (error) {
+        console.error('PDF Error:', error);
+        showToast('Error generating PDF', 'error');
+    }
+};
+
+window.printExistingInvoice = async function (id) {
+    try {
+        const invoices = await getInvoices();
+        const invoice = invoices.find(inv => inv.id === id);
+        if (!invoice) return;
+        printInvoiceReceipt(invoice);
+    } catch (error) {
+        showToast('Print error', 'error');
+    }
+};
+
+window.downloadGSTReport = async function () {
+    const reportElement = document.getElementById('gstReport');
+    if (!reportElement) return;
+
+    showToast('Generating Report PDF...', 'info');
+    const now = new Date();
+    const filename = `GST_Report_${now.getMonth() + 1}_${now.getFullYear()}.pdf`;
+
+    const wrapper = document.createElement('div');
+    wrapper.style.padding = '20px';
+    wrapper.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h1>${state.vendor?.businessName}</h1>
+            <h2>GST Report (${now.getMonth() + 1}/${now.getFullYear()})</h2>
+        </div>
+        ${reportElement.innerHTML}
+    `;
+
+    await downloadPDF(wrapper, filename);
+    showToast('Report downloaded! ✓', 'success');
 };
 
 document.addEventListener('DOMContentLoaded', initApp);

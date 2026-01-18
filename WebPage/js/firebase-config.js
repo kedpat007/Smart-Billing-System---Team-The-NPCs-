@@ -1,7 +1,7 @@
 // Firebase Configuration for SmartDukaan
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // Your Firebase configuration
 const firebaseConfig = {
@@ -40,7 +40,9 @@ export {
     signInWithPhoneNumber,
     onAuthStateChanged,
     RecaptchaVerifier,
-    signOut
+    signOut,
+    GoogleAuthProvider,
+    signInWithPopup
 };
 
 console.log('🔥 Firebase initialized successfully!');
